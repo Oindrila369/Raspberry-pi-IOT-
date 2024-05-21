@@ -1,0 +1,72 @@
+
+import RPi.GPIO as GPIO
+import board
+import adafruit_dht
+import psutil
+import time
+
+# Set up GPIO for water detection
+channel = 21
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(channel, GPIO.IN)
+
+# Global variable to store water detection status
+water_status = "Unknown"
+
+# Define callback function for water detection
+def callback(channel):
+    global water_status
+    if GPIO.input(channel):
+        water_status = "No Water Detected"
+    else:
+        water_status = "Water Detected"
+
+# Add event detection for the water sensor
+GPIO.add_event_detect(channel, GPIO.BOTH, bouncetime=300)
+GPIO.add_event_callback(channel, callback)
+
+# Kill existing processes that might conflict with the sensor
+for proc in psutil.process_iter():
+    if proc.name() == 'libgpiod_pulsein' or proc.name() == 'libgpiod_pulsei':
+        proc.kill()
+
+# Initialize the DHT11 sensor
+sensor = adafruit_dht.DHT11(board.D23)
+
+# Initial reading to set the initial water status
+if GPIO.input(channel):
+    water_status = "No Water Detected"
+else:
+    water_status = "Water Detected"
+
+# Main loop to read the temperature, humidity, and water status
+try:
+    while True:
+        try:
+            temp = sensor.temperature
+            humidity = sensor.humidity
+            # Print temperature, humidity, and water status on the same line
+            print("Temperature: {}*C   Humidity: {}%   Water Status: {}".format(temp, humidity, water_status))
+        except RuntimeError as error:
+            # Handle errors from the DHT11 sensor
+            print(error.args[0])
+        except Exception as error:
+            # Handle unexpected exceptions
+            sensor.exit()
+            raise error
+        time.sleep(1.0)
+except KeyboardInterrupt:
+    # Clean up GPIO on Ctrl+C
+    GPIO.cleanup()
+    print("Program stopped by user")
+except Exception as error:
+    # Clean up GPIO and re-raise any unexpected exceptions
+    GPIO.cleanup()
+    print(f"An error occurred: {error}")
+    raise
+
+
+
+
+
+
